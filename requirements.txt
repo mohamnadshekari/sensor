@@ -1,0 +1,6 @@
+flask
+flask-login
+paho-mqtt
+python-dotenv
+pyjwt
+EOF
