@@ -1,106 +1,330 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digital Twin Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Digital Twin | Industrial OS</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body { background-color: #0f172a; color: white; }
-        .card { background-color: #1e293b; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+        
+        :root {
+            --bg-dark: #0f1115;
+            --panel-bg: rgba(23, 25, 30, 0.7);
+            --border-color: rgba(255, 255, 255, 0.05);
+            --accent-blue: #3b82f6;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            /* گرادینت بسیار نرم و صنعتی */
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(30, 41, 59, 0.2) 0px, transparent 50%);
+            color: #94a3b8;
+            min-height: 100vh;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* باکس‌های تو در تو با استایل شیشه‌ای تیره */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .glass-inset {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+        }
+
+        /* انیمیشن فن بسیار نرم */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .fan-active {
+            animation: spin 1.5s linear infinite;
+            color: var(--accent-blue);
+            filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4));
+        }
+        .fan-idle { color: #334155; }
+
+        /* استایل انتخاب دستگاه */
+        .device-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .device-card.active {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* برای نمودار */
+        canvas { filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3)); }
     </style>
 </head>
-<body class="p-8">
-    <div class="max-w-6xl mx-auto">
-        <h1 class="text-3xl font-bold mb-8 text-center text-blue-400">Digital Twin: Industrial RTU Monitor</h1>
-        
-        <!-- بخش نمایش اعداد اصلی -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div class="card text-center">
-                <p class="text-gray-400 text-sm">دما (Temperature)</p>
-                <p id="temp-val" class="text-4xl font-bold text-orange-500">--</p>
-                <p class="text-xs text-gray-500 mt-2">°C</p>
-            </div>
-            <div class="card text-center">
-                <p class="text-gray-400 text-sm">فشار (Pressure)</p>
-                <p id="pres-val" class="text-4xl font-bold text-blue-500">--</p>
-                <p class="text-xs text-gray-500 mt-2">Bar</p>
-            </div>
-            <div class="card text-center">
-                <p class="text-gray-400 text-sm">وضعیت سیستم (Status)</p>
-                <p id="status-val" class="text-2xl font-bold text-green-500">--</p>
-                <p id="time-val" class="text-xs text-gray-500 mt-2">--</p>
-            </div>
-        </div>
+<body class="p-4 md:p-8">
 
-        <!-- بخش نمودار -->
-        <div class="card">
-            <canvas id="liveChart" height="100"></canvas>
+    <div class="max-w-[1600px] mx-auto">
+        <!-- TOP BAR -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-slate-100 tracking-tight uppercase mono">Digital Twin <span class="text-blue-500">v2.0</span></h1>
+                <p class="text-xs text-slate-500 mono">System Status: <span class="text-emerald-500">OPERATIONAL</span></p>
+            </div>
+            
+            <div id="global-status-bar" class="glass-panel px-4 py-2 flex gap-4 items-center text-xs mono">
+                <!-- Device Selector / Status will appear here -->
+                <span class="text-slate-600">Scanning Nodes...</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- LEFT SIDEBAR: Device List & Quick Stats -->
+            <aside class="lg:col-span-3 space-y-6">
+                <div class="glass-panel p-5">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">Active Nodes</h3>
+                    <div id="device-list" class="space-y-2">
+                        <!-- List of devices will be injected here -->
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">System Health</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs">Latency</span>
+                            <span class="text-xs mono text-emerald-500">12ms</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                            <div class="bg-blue-500 h-full w-[92%]"></div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- MAIN CONTENT: Dashboard -->
+            <main class="lg:col-span-9 space-y-6">
+                
+                <!-- TOP ROW: Real-time Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Temp Card -->
+                    <div class="glass-panel p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Temperature</span>
+                            <i data-lucide="thermometer" class="w-4 h-4 text-blue-500"></i>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span id="temp-val" class="text-4xl font-light text-slate-100 mono">--.-</span>
+                            <span class="text-slate-500 text-sm">°C</span>
+                        </div>
+                        <div class="mt-4 glass-inset p-2 text-[10px] text-center text-slate-500 mono">
+                            STABLE RANGE: 20-30°C
+                        </div>
+                    </div>
+
+                    <!-- Pressure Card -->
+                    <div class="glass-panel p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Pressure</span>
+                            <i data-lucide="gauge" class="w-4 h-4 text-emerald-500"></i>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span id="press-val" class="text-4xl font-light text-slate-100 mono">--.--</span>
+                            <span class="text-slate-500 text-sm">bar</span>
+                        </div>
+                        <div class="mt-4 glass-inset p-2 text-[10px] text-center text-slate-500 mono">
+                            MAX: 5.0 bar
+                        </div>
+                    </div>
+
+                    <!-- Fan/Cooling Card -->
+                    <div class="glass-panel p-6 flex flex-col justify-between">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Cooling Unit</span>
+                            <i data-lucide="wind" id="fan-icon" class="w-5 h-5 fan-idle"></i>
+                        </div>
+                        <div>
+                            <p id="fan-status-text" class="text-lg font-medium text-slate-400">Initializing...</p>
+                            <p class="text-[10px] text-slate-600 mono mt-1">AUTO-CONTROL: ACTIVE</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOTTOM ROW: Large Chart -->
+                <div class="glass-panel p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Live Telemetry Stream</h3>
+                        <div class="flex gap-4 text-[10px] mono">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-500 rounded-full"></span> TEMP</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-emerald-500 rounded-full"></span> PRESS</span>
+                        </div>
+                    </div>
+                    <div class="h-[400px] w-full">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+            </main>
         </div>
     </div>
 
     <script>
-        // تنظیمات نمودار
-        const ctx = document.getElementById('liveChart').getContext('2d');
-        const chart = new Chart(ctx, {
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- CONFIGURATION ---
+        let currentDeviceId = "RTU-01"; // پیش‌فرض
+        let chart;
+
+        // --- CHART SETUP ---
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        chart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [{
-                    label: 'Temperature (°C)',
-                    borderColor: '#f97316',
-                    data: [],
-                    tension: 0.4
-                }, {
-                    label: 'Pressure (Bar)',
-                    borderColor: '#3b82f6',
-                    data: [],
-                    tension: 0.4
-                }]
+                datasets: [
+                    {
+                        label: 'Temperature',
+                        borderColor: '#3b82f6',
+                        borderWidth: 2,
+                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                        data: [],
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Pressure',
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        data: [],
+                        tension: 0.4,
+                        pointRadius: 0
+                    }
+                ]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
                 scales: {
-                    x: { display: true, grid: { color: '#334155' } },
-                    y: { display: true, grid: { color: '#334155' } }
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: '#475569', font: { size: 10, family: 'JetBrains Mono' } }
+                    },
+                    y: { 
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        ticks: { color: '#475569', font: { size: 10, family: 'JetBrains Mono' } }
+                    }
                 }
             }
         });
 
-        // تابع دریافت داده از سرور (AJAX)
-        async function fetchData() {
+        // --- CORE LOGIC ---
+
+        // تابع برای آپدیت کردن لیست دستگاه‌ها در سایدبار و هدر
+        async function updateDeviceList() {
             try {
-                const response = await fetch('/api/data'); // ما یک Route جدید در Flask می‌سازیم
-                const data = await response.json();
+                const res = await fetch('/api/devices');
+                const devices = await res.json();
+                const listContainer = document.getElementById('device-list');
+                const statusBar = document.getElementById('global-status-bar');
+                
+                listContainer.innerHTML = '';
+                statusBar.innerHTML = '';
 
-                // آپدیت اعداد
-                document.getElementById('temp-val').innerText = data.temperature.toFixed(1);
-                document.getElementById('pres-val').innerText = data.pressure.toFixed(1);
-                document.getElementById('status-val').innerText = data.status;
-                document.getElementById('time-val').innerText = data.timestamp;
+                Object.keys(devices).forEach(id => {
+                    // آپدیت سایدبار
+                    const isActive = (id === currentDeviceId);
+                    const card = document.createElement('div');
+                    card.className = `device-card glass-inset p-3 flex justify-between items-center ${isActive ? 'active' : ''}`;
+                    card.onclick = () => {
+                        currentDeviceId = id;
+                        updateDashboard();
+                    };
+                    card.innerHTML = `
+                        <span class="text-xs mono ${isActive ? 'text-blue-400' : 'text-slate-400'}">${id}</span>
+                        <span class="w-2 h-2 rounded-full ${devices[id].status === 'Online' ? 'bg-emerald-500' : 'bg-red-500'}"></span>
+                    `;
+                    listContainer.appendChild(card);
 
-                // آپدیت نمودار
-                const now = new Date().toLocaleTimeString();
+                    // آپدیت هدر (Status Bar)
+                    const statusItem = document.createElement('div');
+                    statusItem.className = 'flex items-center gap-2 border-r border-slate-800 pr-4 last:border-0';
+                    statusItem.innerHTML = `
+                        <span class="text-slate-500">${id}:</span>
+                        <span class="text-slate-200">${devices[id].status}</span>
+                    `;
+                    statusBar.appendChild(statusItem);
+                });
+            } catch (e) {
+                console.error("Error fetching device list:", e);
+            }
+        }
+
+        // تابع اصلی دریافت داده‌ها
+        async function updateDashboard() {
+            try {
+                const res = await fetch(`/api/data/${currentDeviceId}`);
+                if (!res.ok) throw new Error(`Device ${currentDeviceId} not responding`);
+                
+                const data = await res.json();
+
+                // 1. Update Metrics
+                document.getElementById('temp-val').textContent = data.temperature.toFixed(1);
+                document.getElementById('press-val').textContent = data.pressure.toFixed(2);
+
+                // 2. Update Fan Animation
+                const fanIcon = document.getElementById('fan-icon');
+                const fanText = document.getElementById('fan-status-text');
+                
+                if (data.fan === "ON") {
+                    fanIcon.className = "w-5 h-5 fan-active";
+                    fanText.textContent = "Cooling Active";
+                    fanText.className = "text-lg font-medium text-blue-400";
+                } else {
+                    fanIcon.className = "w-5 h-5 fan-idle";
+                    fanText.textContent = "Standby";
+                    fanText.className = "text-lg font-medium text-slate-500";
+                }
+
+                // 3. Update Chart
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 chart.data.labels.push(now);
                 chart.data.datasets[0].data.push(data.temperature);
                 chart.data.datasets[1].data.push(data.pressure);
 
-                // محدود کردن تعداد نقاط نمودار (برای جلوگیری از کند شدن)
                 if (chart.data.labels.length > 20) {
                     chart.data.labels.shift();
                     chart.data.datasets[0].data.shift();
                     chart.data.datasets[1].data.shift();
                 }
-                chart.update();
+                chart.update('none');
 
             } catch (error) {
-                console.error("Error fetching data:", error);
+                console.error("Data fetch error:", error);
+                document.getElementById('temp-val').textContent = "ERR";
+                document.getElementById('press-val').textContent = "ERR";
             }
         }
 
-        // درخواست داده هر 2 ثانیه یک بار
-        setInterval(fetchData, 2000);
+        // --- INITIALIZATION ---
+        // اجرای اولیه
+        updateDeviceList();
+        updateDashboard();
+
+        // چرخش‌های زمانی
+        setInterval(updateDeviceList, 10000); // لیست دستگاه‌ها هر 10 ثانیه چک شود
+        setInterval(updateDashboard, 2000);   // داده‌های اصلی هر 2 ثانیه آپدیت شوند
+
     </script>
 </body>
 </html>
